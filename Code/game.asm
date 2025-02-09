@@ -1,53 +1,82 @@
-                 include  "VECTREX.I"                  ; This is an include file, when you run the assembler, Imagine it is as if the contents of the .I file 
+;==========================================================================
+; VECTREX GAME CODE – RESTRUCTURED VERSION
+;==========================================================================
+
+                    include  "VECTREX.I"                  ; Include common definitions/macros
+
+;==========================================================================
+; SECTION 1: VARIABLE DEFINITIONS (BSS)
+;==========================================================================
+
                     bss      
                     org      $c880 
-Lives_Left          ds       1 
+
+;--- Game State Variables ---
+Lives_Left          ds       1                            ; Number of lives remaining 
 map_Height          ds       1 
-deathscreen_count	  ds		  1
+deathscreen_count   ds       1 
 track_frame         ds       1 
-player_yx           ds       0 
-player_y            ds       1 
-player_x            ds       1 
-eye_frame           ds       1 
-look_dir            ds       1 
-jump_cycle          ds       1 
-counter			  ds       1
-score     		  ds       2
-deathpit_height	  ds       2
-;
+
+player_yx           ds       0                            ; Combined player coordinates storage 
+player_y            ds       1                            ; Player Y position 
+player_x            ds       1                            ; Player X position 
+
+eye_frame           ds       1                            ; Counter for eye blink animation 
+look_dir            ds       1                            ; Player facing direction (0=left, else right) 
+jump_cycle          ds       1                            ; Jump counter for upward motion 
+counter             ds       1                            ; General purpose counter 
+score               ds       2                            ; Score value 
+deathpit_height     ds       2                            ; Height at which player dies 
+
+;--- Platform Data (Start & End Markers) ---
 platformStartAddress 
 platform_1_yx       ds       0 
 platform_1_y        ds       1 
 platform_1_x        ds       1 
+
 platform_2_yx       ds       0 
 platform_2_y        ds       1 
 platform_2_x        ds       1 
+
 platform_3_yx       ds       0 
 platform_3_y        ds       1 
 platform_3_x        ds       1 
+
 platform_4_yx       ds       0 
 platform_4_y        ds       1 
 platform_4_x        ds       1 
+
 platform_5_yx       ds       0 
 platform_5_y        ds       1 
 platform_5_x        ds       1 
+
 platform_6_yx       ds       0 
 platform_6_y        ds       1 
 platform_6_x        ds       1 
+
 platform_7_yx       ds       0 
 platform_7_y        ds       1 
 platform_7_x        ds       1 
+
 platform_8_yx       ds       0 
 platform_8_y        ds       1 
 platform_8_x        ds       1 
+
 platform_9_yx       ds       0 
 platform_9_y        ds       1 
 platform_9_x        ds       1 
 platformEndAddress 
-hitdetect_count     ds       1 
+
+hitdetect_count     ds       1                            ; Counter for hit-detection loops 
+
+;==========================================================================
+; SECTION 2: CODE (Program Instructions)
+;==========================================================================
+
                     code     
                     org      $0000 
-; Magic Init Block
+
+;--- Magic Initialization Block ---
                     fcb      $67,$20 
                     fcc      "GCE 2018"
                     fcb      $80 
@@ -55,102 +84,118 @@ hitdetect_count     ds       1
                     fdb      $f850 
                     fdb      $30b8 
                     fcc      "GAME TEST"
-                    fcb      $80,$0
+                    fcb      $80,$0 
 
+;==========================================================================
+; ROUTINE: SETUP
+; Initialize game variables, positions, and hardware settings
+;==========================================================================
 setup: 
                     lda      #05 
                     sta      track_frame 
-				  sta	  Lives_Left
- 				  sta	  score
+                    sta      Lives_Left 
+                    sta      score 
+
+        ;--- Initialize Platforms & Player Starting Position ---
                     ldd      #$1010 
                     std      platform_1_yx 
                     std      player_yx 
+
                     ldd      #$3030 
                     std      platform_2_yx 
-                    lda      #$50
-				  ldb      #-$40
+
+                    lda      #$50 
+                    ldb      #-$40 
                     std      platform_3_yx 
+
                     ldd      #$7050 
                     std      platform_4_yx 
-                    lda      #$90
-				  ldb      #-$20 
+
+                    lda      #$90 
+                    ldb      #-$20 
                     std      platform_5_yx 
-                    lda      #$a0
-				  ldb      #$20 
+
+                    lda      #$a0 
+                    ldb      #$20 
                     std      platform_6_yx 
-                    lda      #$c0
-				  ldb      #$60 
+
+                    lda      #$c0 
+                    ldb      #$60 
                     std      platform_7_yx 
-                    lda      #$e0
-				  ldb      #-$80
+
+                    lda      #$e0 
+                    ldb      #-$80 
                     std      platform_8_yx 
-                    lda      #$ff
-				  ldb      #-$20 
+
+                    lda      #$ff 
+                    ldb      #-$20 
                     std      platform_9_yx 
-                    lda      #-127
-				  ldb      #-$00 
-				  std	  deathpit_height 		    ; set death-pit height
-                    ldd      #$FC20                       ; HEIGTH, WIDTH (-4, 32) 
-                    std      Vec_Text_HW                  ; store to BIOS RAM location 
-                    lda      #1                           ; these set up the joystick 
-                    sta      Vec_Joy_Mux_1_X              ; enquiries 
-                    lda      #3                           ; allowing only all directions 
-                    sta      Vec_Joy_Mux_1_Y              ; for joystick one 
-                    lda      #0                           ; this setting up saves a few 
-                    sta      Vec_Joy_Mux_2_X              ; hundred cycles 
-                    sta      Vec_Joy_Mux_2_Y              ; don't miss it, if you don't need the second joystick! 
-;MAP PLAN
-;eerst laad hij platformen tot de top
-;houd vervolgens de couter bij van de scroll
-;op basis van andere waarden tekent er een nieuw platform bij
-;kijkt of er plafromen onderin weg gehaald moeten worden
 
+        ;--- Set Death-Pit Height ---
+                    lda      #-127 
+                    ldb      #-$00 
+                    std      deathpit_height 
+
+        ;--- Configure Display & Joystick ---
+                    ldd      #$FC20                       ; Height, Width (-4, 32) 
+                    std      Vec_Text_HW                  ; Store to BIOS RAM location 
+
+                    lda      #1                           ; Setup joystick 1 (all directions) 
+                    sta      Vec_Joy_Mux_1_X 
+                    lda      #3 
+                    sta      Vec_Joy_Mux_1_Y 
+
+                    lda      #0                           ; Disable joystick 2 to save cycles 
+                    sta      Vec_Joy_Mux_2_X 
+                    sta      Vec_Joy_Mux_2_Y 
+
+                    jmp      level                        ; Enter main game loop 
+
+
+;==========================================================================
+; ROUTINE: LEVEL (Main Game Loop)
+;==========================================================================
 level: 
-                    jsr      Wait_Recal                   ;Reset the CRT 
-                    ldd      #0000                        ;Get x,y 
-                    jsr      Moveto_d_7F                  ;go to (x,y) 
-                    lda      #$7f                         ;Get the Intensity 
-                    jsr      Intensity_a                  ;Set intensitywaqs 
-                    jsr      lives                ;Draw amount lives left 
-; loop thru all platforms
-; start at forst platform 
+                    jsr      Wait_Recal                   ; Reset CRT 
+                    ldd      #0000                        ; Set starting coordinates (0,0) 
+                    jsr      Moveto_d_7F                  ; Move to (x,y) 
+                    lda      #$7f 
+                    jsr      Intensity_a                  ; Set drawing intensity 
+
+                    jsr      lives                        ; Draw remaining lives 
+
+        ;--- Loop through each platform ---
                     ldu      #platformStartAddress 
-platformLoop 
-                    ldd      ,u++                         ; load next position, and increment U by 2, so U after this points to the next platform position 
-                    jsr      platform_draw                ;Draw platform 1 
-					cmpa	 	#-120						;compair with platform_X
-					bne		 #geenwissel					;branch if not
-					jsr		 Random						;take a random number
-					inca
-					inca
-					inca
-					stb	 	 ,u							;write it to platform_x
-geenwissel	
-                    cmpu     #platformEndAddress          ; is u pointing to "platform finished" - 
-                    bne      platformLoop                 ; no? that print next platform 
-                    jsr      player_draw                  ;jump to drawing the player 
-                    jsr      drop_height                  ;makes the height drop once a recal 
-				
-                    bra      level 
+platformLoop: 
+                    ldd      ,u++                         ; Get platform position; U now points to next platform 
+                    jsr      platform_draw                ; Draw the current platform 
 
+                    cmpa     # -120                       ; Compare platform X coordinate (example threshold) 
+                    bne      SkipRandomize 
+                    jsr      Random                       ; Get a random number if condition met 
+                    inca     
+                    inca     
+                    inca     
+                    stb      ,u                           ; Update platform X coordinate 
+
+SkipRandomize: 
+                    cmpu     #platformEndAddress          ; Have we processed all platforms? 
+                    bne      platformLoop 
+
+                    jsr      player_draw                  ; Draw the player (including eyes animation) 
+                    jsr      drop_height                  ; Update vertical positions (platforms and player) 
+
+                    bra      level                        ; Repeat the main game loop 
+
+
+;==========================================================================
+; SUBROUTINE: drop_height
+; Decrement vertical positions to simulate scrolling/falling
+;==========================================================================
 drop_height: 
-				  dec	  platform_1_y
+                    dec      platform_1_y 
 
- ;not done//
-
-				  
-;                    lda      #$09                         ;Initialise our loop 
-;                    sta      hitdetect_count              ;variable with a value of 5 
-;                    ldu      #platform_1_yx               ; this time we don't bother with the extra variable, we just take the address of the first data 
-;deathpitloop: 										; is the loop with mixes the plates when off screen
-;                    ldy      ,u++                         ; load directly to y 
-;                    ldx      deathpit_height              ; load directly to x
-;                    lda      #10 
-;                    ldb      #10 
-;                    jsr      Obj_Hit 
-;                    bne      deathpitloop 
-
- ;//not done
+        ; (Additional drop logic for platform_1 may be added here)
 
                     dec      platform_2_y 
                     dec      platform_3_y 
@@ -160,48 +205,62 @@ drop_height:
                     dec      platform_7_y 
                     dec      platform_8_y 
                     dec      platform_9_y 
-                    dec      player_y 
-                    rts  
+                    dec      player_y                     ; Move the player downward 
+                    rts      
 
-; expects position of platform in D
-; uses egister X  
+
+;==========================================================================
+; SUBROUTINE: platform_draw
+; Expects platform position in D; uses X to load graphics pattern.
+;==========================================================================
 platform_draw: 
-                    jsr      Moveto_d_7F                  ;go to (x,y) 
-                    ldx      #Platform 
-                    jsr      Draw_VLp                     ;Draw platform 1 
-                    jsr      Reset0Ref                    ; go back to zero after platform is drawn 
-                    rts                                   ;done drawing so lets go back 
+                    jsr      Moveto_d_7F                  ; Go to the platform's (x,y) 
+                    ldx      #Platform                    ; Load pointer to platform graphics 
+                    jsr      Draw_VLp                     ; Draw the platform graphic 
+                    jsr      Reset0Ref                    ; Reset drawing reference 
+                    rts      
 
+
+;==========================================================================
+; SUBROUTINE: player_draw
+; Draws the player and handles eye animation.
+;==========================================================================
 player_draw: 
-                    jsr      ifjoy 
-                    jsr      Recalibrate 
+                    jsr      ifjoy                        ; Process joystick input (movement and jumping) 
+                    jsr      Recalibrate                  ; Recalibrate if needed 
+
                     lda      player_y 
                     ldb      player_x 
-                    jsr      Moveto_d_7F                  ;go to (x,y) 
+                    jsr      Moveto_d_7F                  ; Position the player 
                     ldx      #Player 
-                    jsr      Draw_VLp 
-                    lda      look_dir 
-                    beq      links_kijken 
-                    ldb      #-1 
-                    bra      recht_kijken 
+                    jsr      Draw_VLp                     ; Draw the player graphic 
 
-links_kijken: 
-                    ldb      #2 
-recht_kijken: 
+                    lda      look_dir                     ; Check player's facing direction 
+                    beq      draw_left_eyes 
+                    ldb      #-1                          ; Right facing: (if look_dir nonzero) 
+                    bra      draw_right_eyes 
+
+
+draw_left_eyes: 
+                    ldb      #2                           ; Left facing indicator 
+draw_right_eyes: 
                     lda      eye_frame 
-                    beq      eye_blink                    ;If the loop variable is not Zero, jump to loop_start 
+                    beq      eye_blink                    ; If eye_frame zero, blink eyes 
+
                     deca     
                     beq      eye_blink 
                     deca     
                     beq      eye_blink 
-                                                          ;draw eye 1 
+
+        ;--- Draw Normal Eyes ---
                     lda      #10 
                     jsr      Moveto_d_7F 
                     ldx      #Eye1 
                     jsr      Draw_VLp 
-                                                          ;draw eye 2 
+
                     ldx      #Eye2 
                     jsr      Draw_VLp 
+
                     lda      #-6 
                     ldb      #-8 
                     lda      eye_frame 
@@ -209,235 +268,285 @@ recht_kijken:
                     sta      eye_frame 
                     rts      
 
-eye_blink:                                                ;Draw    blink 1 
+
+;==========================================================================
+; SUBROUTINE: eye_blink
+; Draws the blinking eye pattern.
+;==========================================================================
+eye_blink: 
                     lda      #11 
                     jsr      Moveto_d_7F 
                     ldx      #EyeBlink 
                     jsr      Draw_VLp 
                     lda      eye_frame 
-                    beq      off 
+                    beq      reset_eye_frame 
                     deca     
                     sta      eye_frame 
                     rts      
 
-off: 
-                    lda      #130                         ;Initialise our loop (frames to wait till nect blink) 
-                    sta      eye_frame                    ;tracking before next blink 
+
+reset_eye_frame: 
+                    lda      #130                         ; Wait frames until next blink 
+                    sta      eye_frame 
                     rts      
 
-ifjoy: 
-                    jsr      Joy_Digital                  ; read joystick positions 
-                    lda      Vec_Joy_1_X                  ; load joystick 1 position 
-                                                          ; X to A 
-                    beq      x_done                       ; if zero, than no x position 
-                    bmi      left_move                    ; if negative, than left otherwise right 
-right_move:                                               ;        when right input is detected 
-                    ldb      player_x                     ; get current horizontal 
-                    incb     
-                    incb     
-                    incb     
-                    stb      player_x                     ; update player position 
-                    ldb      #$0 
-                    stb      look_dir                     ; define player looking right 
-                    bra      x_done                       ; goto x done 
 
-left_move: 
+;==========================================================================
+; SUBROUTINE: ifjoy
+; Processes joystick input for horizontal movement, jumping, or falling.
+;==========================================================================
+ifjoy: 
+                    jsr      Joy_Digital                  ; Read joystick input 
+                    lda      Vec_Joy_1_X                  ; Check horizontal (X) axis 
+                    beq      X_Done                       ; No movement if zero 
+                    bmi      Left_Move                    ; Negative => move left 
+
+        ;--- Right Movement ---
+Right_Move: 
+                    ldb      player_x 
+                    incb     
+                    incb     
+                    incb     
+                    stb      player_x 
+                    ldb      #$0                          ; Set look direction: right 
+                    sta      look_dir 
+                    bra      X_Done 
+
+
+Left_Move: 
                     ldb      player_x 
                     decb     
                     decb     
                     decb     
                     stb      player_x 
-                    ldb      #$01 
-                    stb      look_dir 
-                    bra      x_done                       ; goto x done 
+                    ldb      #$01                         ; Set look direction: left 
+                    sta      look_dir 
 
-x_done: 
-                    jsr      Read_Btns                    ; get button status 
-                    cmpa     #$00                         ; is a button pressed? 
-                    beq      fall                         ; no, than go on 
-                    bita     #$01                         ; test for button 1 2 
-                    beq      no_button                    ; if not pressed jump(so button 1 is pressed) 
-                    lda      #17                          ; amount of 'frames' 
-                    sta      jump_cycle                   ; set jump counter 
-                    bra      jump                         ; jump to, move player up 
-                    bra      no_button                    ; go to the end 
+X_Done: 
+                    jsr      Read_Btns                    ; Read button inputs 
+                    cmpa     #$00                         ; No button pressed? 
+                    beq      Fall                         ; Proceed to falling logic 
 
-fall: 
-                    lda      jump_cycle                   ; get jump 'frames' 
-                    bne      jump                         ; jump if player is still jumping 
-                    lda      #$09                         ;Initialise our loop 
-                    sta      hitdetect_count              ;variable with a value of 5 
-                    ldu      #platform_1_yx               ; this time we don't bother with the extra variable, we just take the address of the first data 
-hitloop: 
-                    ldy      ,u++                         ; load directly to y - no need to TFR 
-                    ldx      player_yx                    ; load directly to x,no need to do a TFR 
+                    bita     #$01                         ; Button test (e.g., jump button) 
+                    beq      No_Button                    ; If not pressed, do nothing extra 
+
+                    lda      #17                          ; Set jump cycle counter 
+                    sta      jump_cycle 
+                    bra      Jump 
+
+
+Fall: 
+                    lda      jump_cycle                   ; Check if still in jump 
+                    bne      Jump                         ; Continue jump if counter > 0 
+
+        ;--- Hit Detection & Falling ---
+                    lda      #$09                         ; Initialize hit detection loop counter 
+                    sta      hitdetect_count 
+                    ldu      #platform_1_yx               ; Point to first platform 
+HitLoop: 
+                    ldy      ,u++                         ; Load platform coordinate 
+                    ldx      player_yx                    ; Load player's coordinate 
                     lda      #5 
                     ldb      #14 
-                    jsr      Obj_Hit 
-                    bcs      no_button                    ; if Carry flag is set -> than a hit occured! 
-                    dec      hitdetect_count              ; can be decremented directly - > flags will be set correctly! 
-                    bne      hitloop 					; not hit try next one				  
-				  
-				  ldy 	  deathpit_height
-				  ldx      player_yx                    ; load directly to x,no need to do a TFR 
-				  lda      #3 
+                    jsr      Obj_Hit                      ; Check for collision 
+                    bcs      No_Button                    ; If collision detected, exit loop 
+                    dec      hitdetect_count 
+                    bne      HitLoop 
+
+        ; Check if the player is below the death pit
+                    ldy      deathpit_height 
+                    ldx      player_yx 
+                    lda      #3 
                     ldb      #125 
                     jsr      Obj_Hit 
-				  bhi      notdead 					; not out of bounds	
-				  lda	  #$01
-				  cmpa	  Lives_Left
-				  beq	  You_died
-				  dec	  Lives_Left	
-                    ldd      #$5010	
-				  std      player_yx 				  	
-				  jmp	  level	  
+                    bhi      NotDead                      ; Continue if within bounds 
 
-notdead:
-                    ldb      player_y                     ; the players vertical position (falling)
-                    decb     
-                    decb     
-                    decb     
-                    decb     
-                    stb      player_y                     ; hoogte van player verandert 
-                    bra      no_button 
+        ; Player has “died”
+                    lda      #$01 
+                    cmpa     Lives_Left 
+                    beq      You_died                     ; If last life, go to death screen 
+                    dec      Lives_Left 
+                    ldd      #$5010 
+                    std      player_yx                    ; Reset player position 
+                    jmp      level 
 
-jump: 
+
+NotDead: 
+                    ldb      player_y                     ; Process falling: adjust vertical position 
+                    decb     
+                    decb     
+                    decb     
+                    decb     
+                    stb      player_y 
+                    bra      No_Button 
+
+
+Jump: 
                     lda      jump_cycle 
-                    beq      no_button 
+                    beq      No_Button 
                     ldb      player_y 
                     incb     
                     incb     
                     incb     
                     incb     
-                    stb      player_y 
+                    stb      player_y                     ; Update player's Y for jump 
                     deca     
                     sta      jump_cycle 
-                    bra      no_button 
+                    bra      No_Button 
 
-no_button: 
-                    rts    
-;start lives
-lives:											;Look amount of lives then draw that
-				  lda	  Lives_Left
-				  sta	  counter
+
+No_Button: 
+                    rts      
+
+
+;==========================================================================
+; SUBROUTINE: lives
+; Draws the life icons on the screen.
+;==========================================================================
+lives: 
+                    lda      Lives_Left 
+                    sta      counter 
                     lda      #117 
-				  ldb      #-120
-                    jsr      Moveto_d_7F                  ;go to (x,y)   
-draw_lives			
-				  ldx      #life			  
-                    jsr      Draw_VLp 		 
+                    ldb      #-120 
+                    jsr      Moveto_d_7F                  ; Set starting position for life icons 
+Draw_Lives: 
+                    ldx      #life 
+                    jsr      Draw_VLp 
                     lda      #03 
-				  ldb      #08
-                    jsr      Moveto_d_7F                  ;go to (x,y)   
-				  dec 	  counter              
-				  bne 	  draw_lives				;branch not equel
-                    jsr      Reset0Ref                    ; go back to zero after platform is drawn 
-				  ;rts
-;end lives
-score_draw:											;Look amount of lives then draw that
-                    jsr      Moveto_d_7F                  ;go to (x,y)   
-				 ;ldd      score
-	 			  ldu      #score_string     		; address of string
+                    ldb      #08 
+                    jsr      Moveto_d_7F                  ; Move to next icon position 
+                    dec      counter 
+                    bne      Draw_Lives 
+                    jsr      Reset0Ref                    ; Reset drawing reference after lives are drawn 
+                    rts      
+
+
+;==========================================================================
+; SUBROUTINE: score_draw
+; Displays the score.
+;==========================================================================
+score_draw: 
+                    jsr      Moveto_d_7F                  ; Set position for score display 
+        ; (Conversion of SCORE to ASCII could be added here)
+                    ldu      #score_string                ; Load pointer to score string 
                     lda      #117 
-				  ldb      #120
-		 		  jsr   	  Print_Str_d             		; Vectrex BIOS print routine
-       			  rts
-You_died:		 
-				lda		#$05
-				sta		deathscreen_count
-died_loop:
-				jsr      Wait_Recal                   ;Reset the CRT
-              	ldd      #0000
-				jsr      Moveto_d_7F                  ;go to (x,y)  
-				ldu      #died_text     		; address of string
-		 		jsr   	  Print_Str_d             		; Vectrex BIOS print routine
-				dec 	  deathscreen_count              
-    				bra 	  died_loop				;branch not equel
-    				lda	  #$05
-				sta	  Lives_Left
-				jmp	  setup				
+                    ldb      #120 
+                    jsr      Print_Str_d                  ; Print score string using BIOS routine 
+                    rts      
 
-died_text:
-                DB   "YOU DIED"
-                DB   $80
-	
-score_string:
-                DB   "123456"     		         ; only capital letters
-                DB   $80                        ; $80 is end of string
-				    
 
-;kill_player:
-;        dec   Lives_Left    ;Decrement the number of lives left by 1
-;        beq   game_over     ;Check if that was the last live, jump if so
-;        rts
+;==========================================================================
+; SUBROUTINE: You_died
+; Display the "YOU DIED" message and then reset the game.
+;==========================================================================
+You_died: 
+                    lda      #$05 
+                    sta      deathscreen_count 
+Died_Loop: 
+                    jsr      Wait_Recal                   ; Reset CRT 
+                    ldd      #0000 
+                    jsr      Moveto_d_7F 
+                    ldu      #died_text 
+                    jsr      Print_Str_d                  ; Display death text 
+                    dec      deathscreen_count 
+                    bra      Died_Loop 
+
+                    lda      #$05 
+                    sta      Lives_Left 
+                    jmp      setup 
+
+
+;==========================================================================
+; SECTION 3: DATA (Strings, Music, and Graphics)
+;==========================================================================
+
+died_text: 
+                    DB       "YOU DIED"
+                    DB       $80                          ; End-of-string marker 
+
+score_string: 
+                    DB       "123456"                     ; Example score (only capital letters)
+                    DB       $80                          ; End-of-string marker 
+
+;--- Music Data ---
 music: 
                     fdb      $fee8 
                     fdb      $feb6 
                     fcb      $0,$80 
                     fcb      $0,$80 
-Player: 
-                    DB       $FF, +$00, +$06              ; pattern, y, x 
-                    DB       $FF, +$02, +$02              ; pattern, y, x 
-                    DB       $FF, +$0B, +$00              ; pattern, y, x 
-                    DB       $FF, +$02, -$02              ; pattern, y, x 
-                    DB       $FF, +$00, -$06              ; pattern, y, x 
-                    DB       $FF, -$02, -$02              ; pattern, y, x 
-                    DB       $FF, -$0B, +$00              ; pattern, y, x 
-                    DB       $FF, -$02, +$02              ; pattern, y, x 
-                    DB       $00, +$04, -$02              ; pattern, y, x 
-                    DB       $FF, -$01, -$04              ; pattern, y, x 
-                    DB       $FF, +$03, +$00              ; pattern, y, x 
-                    DB       $FF, -$01, +$04              ; pattern, y, x 
-                    DB       $FF, +$00, +$0A              ; pattern, y, x 
-                    DB       $FF, +$01, +$04              ; pattern, y, x 
-                    DB       $FF, -$03, +$00              ; pattern, y, x 
-                    DB       $FF, +$01, -$04              ; pattern, y, x 
-                    DB       $00, -$06, -$07              ; pattern, y, x 
-                    DB       $FF, -$03, -$01              ; pattern, y, x 
-                    DB       $FF, +$00, +$02              ; pattern, y, x 
-                    DB       $FF, +$03, -$01              ; pattern, y, x 
-                    DB       $00, +$00, +$04              ; pattern, y, x 
-                    DB       $FF, -$03, -$01              ; pattern, y, x 
-                    DB       $FF, +$00, +$02              ; pattern, y, x 
-                    DB       $FF, +$03, -$01              ; pattern, y, x 
-                    DB       $01                          ; endmarker (high bit in pattern not set) 
-Platform: 
-                    DB       $00, -$05, -$05              ; pattern, y, x 
-                    DB       $FF, +$00, +$14              ; pattern, y, x 
-                    DB       $FF, +$04, +$04              ; pattern, y, x 
-                    DB       $FF, +$00, -$1C              ; pattern, y, x 
-                    DB       $FF, -$04, +$04              ; pattern, y, x 
-                    DB       $01                          ; endmarker (high bit in pattern not set) 
-Eye1: 
-                    DB       $FF, +$03, +$00              ; pattern, y, x 
-                    DB       $FF, +$00, -$02              ; pattern, y, x 
-                    DB       $FF, -$03, +$00              ; pattern, y, x 
-                    DB       $FF, +$00, +$02              ; pattern, y, x 
-                    DB       $01                          ; endmarker (high bit in pattern not set) 
-Eye2: 
-                    DB       $00, +$00, -$03              ; pattern, y, x 
-                    DB       $FF, +$03, +$00              ; pattern, y, x 
-                    DB       $FF, +$00, -$02              ; pattern, y, x 
-                    DB       $FF, -$03, +$00              ; pattern, y, x 
-                    DB       $FF, +$00, +$02              ; pattern, y, x 
-                    DB       $01                          ; endmarker (high bit in pattern not set) 
-EyeBlink: 
-                    DB       $FF, +$00, -$02              ; pattern, y, x 
-                    DB       $00, +$00, -$03              ; pattern, y, x 
-                    DB       $FF, +$00, +$02              ; pattern, y, x 
-                    DB       $00, -$01, +$00              ; pattern, y, x 
-                    DB       $01                          ; endmarker (high bit in pattern not set) 
-life:
-                    DB $01, -$03, -$02 ; sync and move to y, x
-                    DB $FF, +$01, -$01 ; draw, y, x
-                    DB $FF, +$03, +$00 ; draw, y, x
-                    DB $FF, +$01, +$01 ; draw, y, x
-                    DB $FF, +$00, +$01 ; draw, y, x
-                    DB $FF, -$01, +$01 ; draw, y, x
-                    DB $FF, -$03, +$00 ; draw, y, x
-                    DB $FF, -$01, -$01 ; draw, y, x
-                    DB $FF, +$00, -$01 ; draw, y, x
-                    DB $01, -$01, -$03 ; sync and move to y, x
-                    DB $FF, +$00, +$03 ; draw, y, x
-                    DB $02 ; endmarker 
 
+;--- Graphics Data ---
+Player: 
+                    DB       $FF, +$00, +$06 
+                    DB       $FF, +$02, +$02 
+                    DB       $FF, +$0B, +$00 
+                    DB       $FF, +$02, -$02 
+                    DB       $FF, +$00, -$06 
+                    DB       $FF, -$02, -$02 
+                    DB       $FF, -$0B, +$00 
+                    DB       $FF, -$02, +$02 
+                    DB       $00, +$04, -$02 
+                    DB       $FF, -$01, -$04 
+                    DB       $FF, +$03, +$00 
+                    DB       $FF, -$01, +$04 
+                    DB       $FF, +$00, +$0A 
+                    DB       $FF, +$01, +$04 
+                    DB       $FF, -$03, +$00 
+                    DB       $FF, +$01, -$04 
+                    DB       $00, -$06, -$07 
+                    DB       $FF, -$03, -$01 
+                    DB       $FF, +$00, +$02 
+                    DB       $FF, +$03, -$01 
+                    DB       $00, +$00, +$04 
+                    DB       $FF, -$03, -$01 
+                    DB       $FF, +$00, +$02 
+                    DB       $FF, +$03, -$01 
+                    DB       $01                          ; End marker 
+
+Platform: 
+                    DB       $00, -$05, -$05 
+                    DB       $FF, +$00, +$14 
+                    DB       $FF, +$04, +$04 
+                    DB       $FF, +$00, -$1C 
+                    DB       $FF, -$04, +$04 
+                    DB       $01                          ; End marker 
+
+Eye1: 
+                    DB       $FF, +$03, +$00 
+                    DB       $FF, +$00, -$02 
+                    DB       $FF, -$03, +$00 
+                    DB       $FF, +$00, +$02 
+                    DB       $01 
+
+Eye2: 
+                    DB       $00, +$00, -$03 
+                    DB       $FF, +$03, +$00 
+                    DB       $FF, +$00, -$02 
+                    DB       $FF, -$03, +$00 
+                    DB       $FF, +$00, +$02 
+                    DB       $01 
+
+EyeBlink: 
+                    DB       $FF, +$00, -$02 
+                    DB       $00, +$00, -$03 
+                    DB       $FF, +$00, +$02 
+                    DB       $00, -$01, +$00 
+                    DB       $01 
+
+life: 
+                    DB       $01, -$03, -$02 
+                    DB       $FF, +$01, -$01 
+                    DB       $FF, +$03, +$00 
+                    DB       $FF, +$01, +$01 
+                    DB       $FF, +$00, +$01 
+                    DB       $FF, -$01, +$01 
+                    DB       $FF, -$03, +$00 
+                    DB       $FF, -$01, -$01 
+                    DB       $FF, +$00, -$01 
+                    DB       $01, -$01, -$03 
+                    DB       $FF, +$00, +$03 
+                    DB       $02 
+
+;==========================================================================
+; END OF PROGRAM
+;==========================================================================
