@@ -1,6 +1,7 @@
 # Doodle Jump Vectrex Port
 
 This is an unfinished port of the popular mobile game *Doodle Jump* to the Vectrex system. In its current state, you can jump, and platforms will spawn.
+The demo also includes some tests I did with displaying a logo or some other graphics.
 
 ## Features
 
